@@ -303,23 +303,35 @@ export default function App() {
                 >
                   {/* Error Message */}
                   {currentImage.status === 'error' && (
-                    <div className="absolute inset-0 flex items-center justify-center p-6 z-50">
-                      <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-6 max-w-md text-center space-y-4 backdrop-blur-xl">
-                        <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center mx-auto">
-                          <Trash2 className="text-red-500" size={24} />
+                    <div className="absolute inset-0 flex items-center justify-center p-4 z-50 bg-black/40 backdrop-blur-sm">
+                      <div className="bg-[#1a0a0a] border border-red-500/30 rounded-2xl p-5 max-w-sm w-full text-center space-y-3 shadow-2xl">
+                        <div className="w-10 h-10 bg-red-500/20 rounded-full flex items-center justify-center mx-auto">
+                          <Trash2 className="text-red-500" size={20} />
                         </div>
-                        <div>
-                          <h3 className="text-lg font-bold text-red-400">Enhancement Failed</h3>
-                          <p className="text-sm text-red-300/70 mt-1 leading-relaxed">
-                            {currentImage.error || "An unexpected error occurred while processing your image."}
-                          </p>
+                        <div className="space-y-1">
+                          <h3 className="text-sm font-bold text-red-400 uppercase tracking-wider">Enhancement Failed</h3>
+                          <div className="max-h-32 overflow-y-auto pr-1 custom-scrollbar">
+                            <p className="text-[10px] text-red-300/60 leading-relaxed font-mono text-left bg-black/30 p-2 rounded border border-red-500/10">
+                              {currentImage.error || "An unexpected error occurred."}
+                            </p>
+                          </div>
                         </div>
-                        <button 
-                          onClick={() => processImage(selectedIndex)}
-                          className="px-6 py-2 bg-red-500 hover:bg-red-400 text-white rounded-xl text-xs font-bold transition-all active:scale-95"
-                        >
-                          Try Again
-                        </button>
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={() => {
+                              setImages(prev => prev.map((img, i) => i === selectedIndex ? { ...img, status: 'idle', error: undefined } : img));
+                            }}
+                            className="flex-1 py-2 bg-[#222] hover:bg-[#333] text-gray-400 rounded-xl text-[10px] font-bold transition-all"
+                          >
+                            Clear
+                          </button>
+                          <button 
+                            onClick={() => processImage(selectedIndex)}
+                            className="flex-2 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-[10px] font-bold transition-all active:scale-95 shadow-lg shadow-red-600/20"
+                          >
+                            Retry Now
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
