@@ -25,8 +25,8 @@ export async function enhanceImage(base64Image: string, mimeType: string, option
   }
   const ai = new GoogleGenAI({ apiKey: key });
   
-  // Use a list of models to try in case one is busy (503) or limited (429)
-  const modelsToTry = ["gemini-2.5-flash-image", "gemini-3-flash-preview", "gemini-3.1-flash-lite-preview"];
+  // Use a list of models to try in case one is busy (503), limited (429), or fails to return an image
+  const modelsToTry = ["gemini-3-flash-preview", "gemini-2.5-flash-image", "gemini-3.1-flash-lite-preview"];
   let lastError = "";
 
   for (const modelName of modelsToTry) {
@@ -63,6 +63,12 @@ export async function enhanceImage(base64Image: string, mimeType: string, option
         },
       });
 
+      // Check for safety blocks
+      if (response.candidates?.[0]?.finishReason === 'SAFETY') {
+        lastError = "Image blocked by safety filters. Try a different image.";
+        continue;
+      }
+
       let textResponse = "";
       for (const part of response.candidates?.[0]?.content?.parts || []) {
         if (part.inlineData) {
@@ -73,30 +79,38 @@ export async function enhanceImage(base64Image: string, mimeType: string, option
         }
       }
 
-      if (textResponse.includes("429") || textResponse.includes("Quota exceeded") || textResponse.includes("503") || textResponse.includes("demand")) {
-        lastError = textResponse;
-        continue; // Try next model
+      // If we get here, no image was returned in the parts
+      lastError = textResponse || "No image data returned by this model.";
+      
+      // If it's a known "busy" text response, continue. Otherwise, it might be a real error.
+      if (textResponse.includes("429") || textResponse.includes("Quota") || textResponse.includes("503") || textResponse.includes("demand") || textResponse.includes("overloaded")) {
+        continue;
       }
       
-      if (textResponse) throw new Error(textResponse);
+      // If the model just returned some text instead of an image, try the next model
+      continue;
     } catch (error: any) {
       const msg = error?.message || String(error);
       lastError = msg;
       
-      // If it's a "busy" error, try the next model immediately
-      if (msg.includes("503") || msg.includes("demand") || msg.includes("429") || msg.includes("Quota") || msg.includes("RESOURCE_EXHAUSTED")) {
+      // If it's a "busy" error or a model-specific failure, try the next model
+      if (msg.includes("503") || msg.includes("demand") || msg.includes("429") || msg.includes("Quota") || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("overloaded") || msg.includes("not found")) {
         continue;
       }
-      throw error; // For other errors, stop and show it
+      // For other unexpected errors, we still try the next model to be safe
+      continue;
     }
   }
 
   // If we get here, all models failed
-  if (lastError.includes("503") || lastError.includes("demand")) {
-    throw new Error("Google is currently overloaded (High Demand). Please wait 2 minutes and try again.");
+  if (lastError.includes("503") || lastError.includes("demand") || lastError.includes("overloaded")) {
+    throw new Error("Google servers are currently overloaded. Please wait 1-2 minutes and try again.");
   }
   if (lastError.includes("429") || lastError.includes("Quota") || lastError.includes("RESOURCE_EXHAUSTED")) {
-    throw new Error("Google API Limit Reached. Please wait 1 minute or try a different image.");
+    throw new Error("API Limit Reached. Please wait a minute or try a different image.");
   }
-  throw new Error(lastError || "Enhancement failed. Please try again.");
+  if (lastError.includes("SAFETY")) {
+    throw new Error("This image was flagged by safety filters. Please try a different image.");
+  }
+  throw new Error(lastError || "Enhancement failed across all available models. Please try again later.");
 }
