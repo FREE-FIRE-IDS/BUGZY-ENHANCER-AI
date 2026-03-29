@@ -301,6 +301,29 @@ export default function App() {
                   animate={{ opacity: 1 }}
                   className="relative w-full h-full flex items-center justify-center"
                 >
+                  {/* Error Message */}
+                  {currentImage.status === 'error' && (
+                    <div className="absolute inset-0 flex items-center justify-center p-6 z-50">
+                      <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-6 max-w-md text-center space-y-4 backdrop-blur-xl">
+                        <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center mx-auto">
+                          <Trash2 className="text-red-500" size={24} />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-bold text-red-400">Enhancement Failed</h3>
+                          <p className="text-sm text-red-300/70 mt-1 leading-relaxed">
+                            {currentImage.error || "An unexpected error occurred while processing your image."}
+                          </p>
+                        </div>
+                        <button 
+                          onClick={() => processImage(selectedIndex)}
+                          className="px-6 py-2 bg-red-500 hover:bg-red-400 text-white rounded-xl text-xs font-bold transition-all active:scale-95"
+                        >
+                          Try Again
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {viewMode === 'slider' ? (
                     <div 
                       ref={sliderRef}
@@ -604,19 +627,35 @@ export default function App() {
 
           <div className="pt-2">
             <div className="p-3 bg-blue-600/5 border border-blue-500/10 rounded-xl space-y-2">
-              <div className="flex items-center gap-2 text-blue-400/70">
-                <Cpu size={12} />
-                <span className="text-[8px] font-bold uppercase tracking-widest">Engine Status</span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-blue-400/70">
+                  <Cpu size={12} />
+                  <span className="text-[8px] font-bold uppercase tracking-widest">Engine Status</span>
+                </div>
+                <div className={cn(
+                  "w-1.5 h-1.5 rounded-full animate-pulse",
+                  process.env.GEMINI_API_KEY ? "bg-green-500" : "bg-red-500"
+                )} />
               </div>
               <div className="space-y-1">
                 <div className="flex justify-between items-center">
-                  <span className="text-[8px] text-gray-600">Processing Node</span>
-                  <span className="text-[8px] font-mono text-green-500/80">ONLINE</span>
+                  <span className="text-[8px] text-gray-600">API KEY</span>
+                  <span className={cn(
+                    "text-[8px] font-mono font-bold",
+                    process.env.GEMINI_API_KEY ? "text-green-500" : "text-red-500"
+                  )}>
+                    {process.env.GEMINI_API_KEY ? "DETECTED" : "MISSING"}
+                  </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-[8px] text-gray-600">AI Model</span>
                   <span className="text-[8px] font-mono text-blue-400/80">GEMINI-2.5</span>
                 </div>
+                {!process.env.GEMINI_API_KEY && (
+                  <p className="text-[7px] text-red-400/60 leading-tight mt-1">
+                    Please add GEMINI_API_KEY to Vercel and Redeploy.
+                  </p>
+                )}
               </div>
             </div>
           </div>

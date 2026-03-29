@@ -14,8 +14,12 @@ export interface EnhancementOptions {
 }
 
 export async function enhanceImage(base64Image: string, mimeType: string, options: EnhancementOptions): Promise<string> {
-  // Use the environment API key directly for gemini-2.5-flash-image
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  const key = process.env.GEMINI_API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY;
+  if (!key || key === 'MY_GEMINI_API_KEY' || key === 'undefined' || key === '') {
+    const debugInfo = `(Key status: ${!key ? 'missing' : 'invalid/empty'}, env: ${process.env.NODE_ENV})`;
+    throw new Error(`Missing Gemini API Key. ${debugInfo} Please add GEMINI_API_KEY or VITE_GEMINI_API_KEY to your Vercel environment variables and REDEPLOY.`);
+  }
+  const ai = new GoogleGenAI({ apiKey: key });
   
   const model = "gemini-2.5-flash-image";
   
