@@ -66,6 +66,10 @@ export async function enhanceImage(base64Image: string, mimeType: string, option
       }
     }
     
+    if (textResponse.includes("429") || textResponse.includes("Quota exceeded")) {
+      throw new Error("Google API Limit Reached (Quota Exceeded). This is a limit on Google's free tier. Please wait 1 minute or try creating a NEW API key in a NEW project at aistudio.google.com.");
+    }
+    
     throw new Error(textResponse || "No image data returned. Try a different enhancement mode or a clearer image.");
   } catch (error) {
     console.error("Enhancement failed:", error);
