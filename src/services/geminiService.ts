@@ -25,15 +25,16 @@ export async function enhanceImage(base64Image: string, mimeType: string, option
   }
   const ai = new GoogleGenAI({ apiKey: key });
   
-  const model = "gemini-2.5-flash-image";
+  // Switching to Gemini 3 Flash for better quota and stability
+  const model = "gemini-3-flash-preview";
   
   const prompts: Record<EnhancementMode, string> = {
-    'ultra-hd': "Act as a professional image upscaler. Enhance this image to Ultra HD quality. Restore all fine details, textures, and edges. Output the enhanced image directly.",
-    'denoise': "Act as a professional denoiser. Remove noise and grain from this image while preserving sharpness. Output the cleaned image directly.",
-    'sharpen': "Act as a professional sharpening tool. Enhance edges and fine details naturally. Output the sharpened image directly.",
-    'portrait': "Act as a professional portrait retoucher. Enhance skin, eyes, and hair details. Output the retouched portrait directly.",
-    'anime': "Act as a professional anime upscaler. Clean up lines and vibrant colors. Output the enhanced artwork directly.",
-    'standard': "Act as a professional image enhancer. Upscale and improve overall quality. Output the enhanced image directly."
+    'ultra-hd': "Enhance this image to Ultra HD. Restore fine details, textures, and edges. Output ONLY the enhanced image.",
+    'denoise': "Remove noise and grain while preserving sharpness. Output ONLY the cleaned image.",
+    'sharpen': "Sharpen edges and fine details naturally. Output ONLY the sharpened image.",
+    'portrait': "Retouch portrait: enhance skin, eyes, and hair. Output ONLY the retouched image.",
+    'anime': "Enhance this anime/artwork. Clean lines and vibrant colors. Output ONLY the enhanced artwork.",
+    'standard': "Perform a balanced enhancement: upscale and improve overall quality. Output ONLY the enhanced image."
   };
 
   let prompt = prompts[options.mode];
