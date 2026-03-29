@@ -145,6 +145,9 @@ export default function App() {
   };
 
   const currentImage = images[selectedIndex];
+  const hasApiKey = !!(process.env.GEMINI_API_KEY || 
+                       (import.meta as any).env?.VITE_GEMINI_API_KEY || 
+                       (window as any).GEMINI_API_KEY);
 
   return (
     <div className="flex flex-col md:flex-row h-screen bg-[#050505] text-white overflow-hidden font-sans selection:bg-blue-500/30">
@@ -309,10 +312,12 @@ export default function App() {
                           <Trash2 className="text-red-500" size={20} />
                         </div>
                         <div className="space-y-1">
-                          <h3 className="text-sm font-bold text-red-400 uppercase tracking-wider">Enhancement Failed</h3>
-                          <div className="max-h-32 overflow-y-auto pr-1 custom-scrollbar">
-                            <p className="text-[10px] text-red-300/60 leading-relaxed font-mono text-left bg-black/30 p-2 rounded border border-red-500/10">
-                              {currentImage.error || "An unexpected error occurred."}
+                          <h3 className="text-sm font-bold text-red-400 uppercase tracking-wider">Notice</h3>
+                          <div className="p-3 bg-black/30 rounded-xl border border-red-500/10">
+                            <p className="text-[11px] text-red-300/80 leading-relaxed">
+                              {currentImage.error?.includes("Limit Reached") 
+                                ? "Google's free AI is currently busy. Please wait 1 minute and click Retry."
+                                : (currentImage.error || "An unexpected error occurred.")}
                             </p>
                           </div>
                         </div>
@@ -646,7 +651,7 @@ export default function App() {
                 </div>
                 <div className={cn(
                   "w-1.5 h-1.5 rounded-full animate-pulse",
-                  process.env.GEMINI_API_KEY ? "bg-green-500" : "bg-red-500"
+                  hasApiKey ? "bg-green-500" : "bg-red-500"
                 )} />
               </div>
               <div className="space-y-1">
@@ -654,16 +659,16 @@ export default function App() {
                   <span className="text-[8px] text-gray-600">API KEY</span>
                   <span className={cn(
                     "text-[8px] font-mono font-bold",
-                    process.env.GEMINI_API_KEY ? "text-green-500" : "text-red-500"
+                    hasApiKey ? "text-green-500" : "text-red-500"
                   )}>
-                    {process.env.GEMINI_API_KEY ? "DETECTED" : "MISSING"}
+                    {hasApiKey ? "DETECTED" : "MISSING"}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-[8px] text-gray-600">AI Model</span>
                   <span className="text-[8px] font-mono text-blue-400/80">GEMINI-2.5</span>
                 </div>
-                {!process.env.GEMINI_API_KEY && (
+                {!hasApiKey && (
                   <p className="text-[7px] text-red-400/60 leading-tight mt-1">
                     Please add GEMINI_API_KEY to Vercel and Redeploy.
                   </p>

@@ -14,10 +14,14 @@ export interface EnhancementOptions {
 }
 
 export async function enhanceImage(base64Image: string, mimeType: string, options: EnhancementOptions): Promise<string> {
-  const key = process.env.GEMINI_API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY;
+  // Robust key detection
+  const key = process.env.GEMINI_API_KEY || 
+              (import.meta as any).env?.VITE_GEMINI_API_KEY || 
+              (window as any).GEMINI_API_KEY;
+
   if (!key || key === 'MY_GEMINI_API_KEY' || key === 'undefined' || key === '') {
-    const debugInfo = `(Key status: ${!key ? 'missing' : 'invalid/empty'}, env: ${process.env.NODE_ENV})`;
-    throw new Error(`Missing Gemini API Key. ${debugInfo} Please add GEMINI_API_KEY or VITE_GEMINI_API_KEY to your Vercel environment variables and REDEPLOY.`);
+    const debugInfo = `(Status: ${!key ? 'missing' : 'invalid'}, Mode: ${process.env.NODE_ENV})`;
+    throw new Error(`API Key Missing. ${debugInfo} If you are on Vercel, please add GEMINI_API_KEY to your Environment Variables and REDEPLOY. If you are in the preview, please refresh the page.`);
   }
   const ai = new GoogleGenAI({ apiKey: key });
   
@@ -67,12 +71,18 @@ export async function enhanceImage(base64Image: string, mimeType: string, option
     }
     
     if (textResponse.includes("429") || textResponse.includes("Quota exceeded")) {
-      throw new Error("Google API Limit Reached (Quota Exceeded). This is a limit on Google's free tier. Please wait 1 minute or try creating a NEW API key in a NEW project at aistudio.google.com.");
+      throw new Error("Google is temporarily busy (Limit Reached). Please wait 60 seconds and try again.");
     }
     
     throw new Error(textResponse || "No image data returned. Try a different enhancement mode or a clearer image.");
-  } catch (error) {
+  } catch (error: any) {
     console.error("Enhancement failed:", error);
+    
+    const msg = error?.message || String(error);
+    if (msg.includes("429") || msg.includes("Quota") || msg.includes("RESOURCE_EXHAUSTED")) {
+      throw new Error("Google is temporarily busy (Limit Reached). Please wait 60 seconds and try again.");
+    }
+    
     throw error;
   }
 }
