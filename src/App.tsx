@@ -315,8 +315,8 @@ export default function App() {
                           <h3 className="text-sm font-bold text-red-400 uppercase tracking-wider">Notice</h3>
                           <div className="p-3 bg-black/30 rounded-xl border border-red-500/10">
                             <p className="text-[11px] text-red-300/80 leading-relaxed">
-                              {currentImage.error?.includes("Limit Reached") 
-                                ? "Google's free AI is currently busy. Please wait 1 minute and click Retry."
+                              {currentImage.error?.includes("Limit Reached") || currentImage.error?.includes("overloaded")
+                                ? "Google's servers are currently overloaded. Please wait 2 minutes and click Retry."
                                 : (currentImage.error || "An unexpected error occurred.")}
                             </p>
                           </div>

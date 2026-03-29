@@ -25,65 +25,78 @@ export async function enhanceImage(base64Image: string, mimeType: string, option
   }
   const ai = new GoogleGenAI({ apiKey: key });
   
-  // Switching to Gemini 3 Flash for better quota and stability
-  const model = "gemini-3-flash-preview";
-  
-  const prompts: Record<EnhancementMode, string> = {
-    'ultra-hd': "Enhance this image to Ultra HD. Restore fine details, textures, and edges. Output ONLY the enhanced image.",
-    'denoise': "Remove noise and grain while preserving sharpness. Output ONLY the cleaned image.",
-    'sharpen': "Sharpen edges and fine details naturally. Output ONLY the sharpened image.",
-    'portrait': "Retouch portrait: enhance skin, eyes, and hair. Output ONLY the retouched image.",
-    'anime': "Enhance this anime/artwork. Clean lines and vibrant colors. Output ONLY the enhanced artwork.",
-    'standard': "Perform a balanced enhancement: upscale and improve overall quality. Output ONLY the enhanced image."
-  };
+  // Use a list of models to try in case one is busy (503) or limited (429)
+  const modelsToTry = ["gemini-2.5-flash-image", "gemini-3-flash-preview", "gemini-3.1-flash-lite-preview"];
+  let lastError = "";
 
-  let prompt = prompts[options.mode];
-  if (options.faceEnhancement) {
-    prompt += " Specifically detect and enhance any faces to high quality.";
-  }
-  prompt += ` Target resolution: ${options.resolution}. Upscale: ${options.upscale}. MAINTAIN ORIGINAL COLORS. DO NOT RETURN TEXT, ONLY THE ENHANCED IMAGE.`;
+  for (const modelName of modelsToTry) {
+    try {
+      const prompts: Record<EnhancementMode, string> = {
+        'ultra-hd': "Enhance this image to Ultra HD. Restore fine details, textures, and edges. Output ONLY the enhanced image.",
+        'denoise': "Remove noise and grain while preserving sharpness. Output ONLY the cleaned image.",
+        'sharpen': "Sharpen edges and fine details naturally. Output ONLY the sharpened image.",
+        'portrait': "Retouch portrait: enhance skin, eyes, and hair. Output ONLY the retouched image.",
+        'anime': "Enhance this anime/artwork. Clean lines and vibrant colors. Output ONLY the enhanced artwork.",
+        'standard': "Perform a balanced enhancement: upscale and improve overall quality. Output ONLY the enhanced image."
+      };
 
-  try {
-    const response = await ai.models.generateContent({
-      model: model,
-      contents: {
-        parts: [
-          {
-            inlineData: {
-              data: base64Image.split(',')[1] || base64Image,
-              mimeType: mimeType,
+      let prompt = prompts[options.mode];
+      if (options.faceEnhancement) {
+        prompt += " Specifically detect and enhance any faces to high quality.";
+      }
+      prompt += ` Target resolution: ${options.resolution}. Upscale: ${options.upscale}. MAINTAIN ORIGINAL COLORS. DO NOT RETURN TEXT, ONLY THE ENHANCED IMAGE.`;
+
+      const response = await ai.models.generateContent({
+        model: modelName,
+        contents: {
+          parts: [
+            {
+              inlineData: {
+                data: base64Image.split(',')[1] || base64Image,
+                mimeType: mimeType,
+              },
             },
-          },
-          {
-            text: prompt,
-          },
-        ],
-      },
-    });
+            {
+              text: prompt,
+            },
+          ],
+        },
+      });
 
-    let textResponse = "";
-    for (const part of response.candidates?.[0]?.content?.parts || []) {
-      if (part.inlineData) {
-        return `data:image/png;base64,${part.inlineData.data}`;
+      let textResponse = "";
+      for (const part of response.candidates?.[0]?.content?.parts || []) {
+        if (part.inlineData) {
+          return `data:image/png;base64,${part.inlineData.data}`;
+        }
+        if (part.text) {
+          textResponse += part.text;
+        }
       }
-      if (part.text) {
-        textResponse += part.text;
+
+      if (textResponse.includes("429") || textResponse.includes("Quota exceeded") || textResponse.includes("503") || textResponse.includes("demand")) {
+        lastError = textResponse;
+        continue; // Try next model
       }
+      
+      if (textResponse) throw new Error(textResponse);
+    } catch (error: any) {
+      const msg = error?.message || String(error);
+      lastError = msg;
+      
+      // If it's a "busy" error, try the next model immediately
+      if (msg.includes("503") || msg.includes("demand") || msg.includes("429") || msg.includes("Quota") || msg.includes("RESOURCE_EXHAUSTED")) {
+        continue;
+      }
+      throw error; // For other errors, stop and show it
     }
-    
-    if (textResponse.includes("429") || textResponse.includes("Quota exceeded")) {
-      throw new Error("Google is temporarily busy (Limit Reached). Please wait 60 seconds and try again.");
-    }
-    
-    throw new Error(textResponse || "No image data returned. Try a different enhancement mode or a clearer image.");
-  } catch (error: any) {
-    console.error("Enhancement failed:", error);
-    
-    const msg = error?.message || String(error);
-    if (msg.includes("429") || msg.includes("Quota") || msg.includes("RESOURCE_EXHAUSTED")) {
-      throw new Error("Google is temporarily busy (Limit Reached). Please wait 60 seconds and try again.");
-    }
-    
-    throw error;
   }
+
+  // If we get here, all models failed
+  if (lastError.includes("503") || lastError.includes("demand")) {
+    throw new Error("Google is currently overloaded (High Demand). Please wait 2 minutes and try again.");
+  }
+  if (lastError.includes("429") || lastError.includes("Quota") || lastError.includes("RESOURCE_EXHAUSTED")) {
+    throw new Error("Google API Limit Reached. Please wait 1 minute or try a different image.");
+  }
+  throw new Error(lastError || "Enhancement failed. Please try again.");
 }
