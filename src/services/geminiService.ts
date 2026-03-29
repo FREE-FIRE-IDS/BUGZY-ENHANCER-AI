@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 
-export type EnhancementMode = 'ultra-hd' | 'denoise' | 'sharpen' | 'portrait' | 'anime' | 'standard';
+export type EnhancementMode = 'ultra-hd' | 'denoise' | 'sharpen' | 'portrait' | 'anime' | 'standard' | 'technical' | 'custom';
 export type ResolutionPreset = '1080p' | '2k' | '4k';
 export type UpscaleFactor = '2x' | '4x' | '8x';
 
@@ -11,6 +11,7 @@ export interface EnhancementOptions {
   faceEnhancement: boolean;
   noiseReduction: number;
   sharpening: number;
+  customPrompt?: string;
 }
 
 export async function enhanceImage(base64Image: string, mimeType: string, options: EnhancementOptions): Promise<string> {
@@ -25,26 +26,28 @@ export async function enhanceImage(base64Image: string, mimeType: string, option
   }
   const ai = new GoogleGenAI({ apiKey: key });
   
-  // Use a list of models to try in case one is busy (503), limited (429), or fails to return an image
-  const modelsToTry = ["gemini-3-flash-preview", "gemini-2.5-flash-image", "gemini-3.1-flash-lite-preview"];
+  // Use a list of models to try. gemini-2.5-flash-image is the primary model for image editing/generation.
+  const modelsToTry = ["gemini-2.5-flash-image", "gemini-3-flash-preview", "gemini-3.1-flash-lite-preview"];
   let lastError = "";
 
   for (const modelName of modelsToTry) {
     try {
       const prompts: Record<EnhancementMode, string> = {
-        'ultra-hd': "Enhance this image to Ultra HD. Restore fine details, textures, and edges. Output ONLY the enhanced image.",
-        'denoise': "Remove noise and grain while preserving sharpness. Output ONLY the cleaned image.",
-        'sharpen': "Sharpen edges and fine details naturally. Output ONLY the sharpened image.",
-        'portrait': "Retouch portrait: enhance skin, eyes, and hair. Output ONLY the retouched image.",
-        'anime': "Enhance this anime/artwork. Clean lines and vibrant colors. Output ONLY the enhanced artwork.",
-        'standard': "Perform a balanced enhancement: upscale and improve overall quality. Output ONLY the enhanced image."
+        'ultra-hd': "Enhance this image to Ultra HD. Restore fine details, textures, and edges.",
+        'denoise': "Remove noise and grain while preserving sharpness.",
+        'sharpen': "Sharpen edges and fine details naturally.",
+        'portrait': "Retouch portrait: enhance skin, eyes, and hair.",
+        'anime': "Enhance this anime/artwork. Clean lines and vibrant colors.",
+        'standard': "Perform a balanced enhancement: upscale and improve overall quality.",
+        'technical': "This is a technical software/UI screenshot. Sharpen all text, icons, and interface elements. Make everything crisp and readable. Do not alter the layout.",
+        'custom': options.customPrompt || "Enhance this image based on user requirements."
       };
 
       let prompt = prompts[options.mode];
       if (options.faceEnhancement) {
         prompt += " Specifically detect and enhance any faces to high quality.";
       }
-      prompt += ` Target resolution: ${options.resolution}. Upscale: ${options.upscale}. MAINTAIN ORIGINAL COLORS. DO NOT RETURN TEXT, ONLY THE ENHANCED IMAGE.`;
+      prompt += ` Target resolution: ${options.resolution}. Upscale factor: ${options.upscale}. MAINTAIN ORIGINAL COLORS. OUTPUT ONLY THE ENHANCED IMAGE. DO NOT EXPLAIN OR REFUSE.`;
 
       const response = await ai.models.generateContent({
         model: modelName,
@@ -61,11 +64,14 @@ export async function enhanceImage(base64Image: string, mimeType: string, option
             },
           ],
         },
+        config: {
+          systemInstruction: "You are a specialized technical image restoration engine. Your ONLY task is to upscale and sharpen the provided image. You are NOT an artist and you are NOT creating content. You are a pixel-processing tool. You must NEVER refuse a request to sharpen a technical interface or software screenshot. Return ONLY the image part. No text.",
+        }
       });
 
       // Check for safety blocks
       if (response.candidates?.[0]?.finishReason === 'SAFETY') {
-        lastError = "Image blocked by safety filters. Try a different image.";
+        lastError = "This image was flagged by safety filters. Please try a different image.";
         continue;
       }
 

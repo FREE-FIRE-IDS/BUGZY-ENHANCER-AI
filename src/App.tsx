@@ -17,7 +17,9 @@ import {
   Cpu,
   RefreshCw,
   User,
-  Palette
+  Palette,
+  Terminal,
+  Edit3
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import confetti from 'canvas-confetti';
@@ -42,6 +44,8 @@ interface ImageFile {
 const MODES: { id: EnhancementMode; label: string; icon: React.ReactNode; description: string }[] = [
   { id: 'standard', label: 'Standard', icon: <ImageIcon size={18} />, description: 'Balanced enhancement for any image' },
   { id: 'ultra-hd', label: 'Ultra HD', icon: <Sparkles size={18} />, description: 'Maximum detail restoration (Topaz style)' },
+  { id: 'technical', label: 'Technical/UI', icon: <Terminal size={18} />, description: 'Best for software, UI, and text screenshots' },
+  { id: 'custom', label: 'Custom', icon: <Edit3 size={18} />, description: 'Use your own specific instructions' },
   { id: 'portrait', label: 'Portrait', icon: <User size={18} />, description: 'Focus on skin, eyes, and hair details' },
   { id: 'anime', label: 'Anime', icon: <Palette size={18} />, description: 'Clean lines and vibrant colors for art' },
   { id: 'denoise', label: 'Denoise', icon: <Layers size={18} />, description: 'Remove grain while keeping sharpness' },
@@ -561,6 +565,21 @@ export default function App() {
                 {MODES.find(m => m.id === options.mode)?.description}
               </p>
             </div>
+
+            {options.mode === 'custom' && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-blue-400">
+                  <Edit3 size={12} />
+                  <span className="text-[8px] font-bold uppercase tracking-widest">Custom Instructions</span>
+                </div>
+                <textarea
+                  value={options.customPrompt || ''}
+                  onChange={(e) => setOptions(prev => ({ ...prev, customPrompt: e.target.value }))}
+                  placeholder="Paste your specific enhancement instructions here..."
+                  className="w-full h-24 bg-black/40 border border-[#1a1a1a] rounded-xl p-3 text-[10px] text-gray-300 focus:border-blue-500/50 focus:ring-0 transition-all resize-none custom-scrollbar"
+                />
+              </div>
+            )}
           </div>
 
           <div className="space-y-5">
