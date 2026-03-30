@@ -17,7 +17,9 @@ import {
   Cpu,
   RefreshCw,
   User,
-  Palette
+  Palette,
+  Terminal,
+  Edit3
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import confetti from 'canvas-confetti';
@@ -42,6 +44,8 @@ interface ImageFile {
 const MODES: { id: EnhancementMode; label: string; icon: React.ReactNode; description: string }[] = [
   { id: 'standard', label: 'Standard', icon: <ImageIcon size={18} />, description: 'Balanced enhancement for any image' },
   { id: 'ultra-hd', label: 'Ultra HD', icon: <Sparkles size={18} />, description: 'Maximum detail restoration (Topaz style)' },
+  { id: 'technical', label: 'Technical/UI', icon: <Terminal size={18} />, description: 'Best for software, UI, and text screenshots' },
+  { id: 'custom', label: 'Custom', icon: <Edit3 size={18} />, description: 'Use your own specific instructions' },
   { id: 'portrait', label: 'Portrait', icon: <User size={18} />, description: 'Focus on skin, eyes, and hair details' },
   { id: 'anime', label: 'Anime', icon: <Palette size={18} />, description: 'Clean lines and vibrant colors for art' },
   { id: 'denoise', label: 'Denoise', icon: <Layers size={18} />, description: 'Remove grain while keeping sharpness' },
@@ -145,6 +149,9 @@ export default function App() {
   };
 
   const currentImage = images[selectedIndex];
+  const hasApiKey = !!(process.env.GEMINI_API_KEY || 
+                       (import.meta as any).env?.VITE_GEMINI_API_KEY || 
+                       (window as any).GEMINI_API_KEY);
 
   return (
     <div className="flex flex-col md:flex-row h-screen bg-[#050505] text-white overflow-hidden font-sans selection:bg-blue-500/30">
@@ -301,6 +308,43 @@ export default function App() {
                   animate={{ opacity: 1 }}
                   className="relative w-full h-full flex items-center justify-center"
                 >
+                  {/* Error Message */}
+                  {currentImage.status === 'error' && (
+                    <div className="absolute inset-0 flex items-center justify-center p-4 z-50 bg-black/40 backdrop-blur-sm">
+                      <div className="bg-[#1a0a0a] border border-red-500/30 rounded-2xl p-5 max-w-sm w-full text-center space-y-3 shadow-2xl">
+                        <div className="w-10 h-10 bg-red-500/20 rounded-full flex items-center justify-center mx-auto">
+                          <Trash2 className="text-red-500" size={20} />
+                        </div>
+                        <div className="space-y-1">
+                          <h3 className="text-sm font-bold text-red-400 uppercase tracking-wider">Notice</h3>
+                          <div className="p-3 bg-black/30 rounded-xl border border-red-500/10">
+                            <p className="text-[11px] text-red-300/80 leading-relaxed">
+                              {currentImage.error?.includes("Limit Reached") || currentImage.error?.includes("overloaded")
+                                ? "Google's servers are currently overloaded. Please wait 2 minutes and click Retry."
+                                : (currentImage.error || "An unexpected error occurred.")}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={() => {
+                              setImages(prev => prev.map((img, i) => i === selectedIndex ? { ...img, status: 'idle', error: undefined } : img));
+                            }}
+                            className="flex-1 py-2 bg-[#222] hover:bg-[#333] text-gray-400 rounded-xl text-[10px] font-bold transition-all"
+                          >
+                            Clear
+                          </button>
+                          <button 
+                            onClick={() => processImage(selectedIndex)}
+                            className="flex-2 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-[10px] font-bold transition-all active:scale-95 shadow-lg shadow-red-600/20"
+                          >
+                            Retry Now
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {viewMode === 'slider' ? (
                     <div 
                       ref={sliderRef}
@@ -521,6 +565,21 @@ export default function App() {
                 {MODES.find(m => m.id === options.mode)?.description}
               </p>
             </div>
+
+            {options.mode === 'custom' && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-blue-400">
+                  <Edit3 size={12} />
+                  <span className="text-[8px] font-bold uppercase tracking-widest">Custom Instructions</span>
+                </div>
+                <textarea
+                  value={options.customPrompt || ''}
+                  onChange={(e) => setOptions(prev => ({ ...prev, customPrompt: e.target.value }))}
+                  placeholder="Paste your specific enhancement instructions here..."
+                  className="w-full h-24 bg-black/40 border border-[#1a1a1a] rounded-xl p-3 text-[10px] text-gray-300 focus:border-blue-500/50 focus:ring-0 transition-all resize-none custom-scrollbar"
+                />
+              </div>
+            )}
           </div>
 
           <div className="space-y-5">
@@ -604,19 +663,35 @@ export default function App() {
 
           <div className="pt-2">
             <div className="p-3 bg-blue-600/5 border border-blue-500/10 rounded-xl space-y-2">
-              <div className="flex items-center gap-2 text-blue-400/70">
-                <Cpu size={12} />
-                <span className="text-[8px] font-bold uppercase tracking-widest">Engine Status</span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-blue-400/70">
+                  <Cpu size={12} />
+                  <span className="text-[8px] font-bold uppercase tracking-widest">Engine Status</span>
+                </div>
+                <div className={cn(
+                  "w-1.5 h-1.5 rounded-full animate-pulse",
+                  hasApiKey ? "bg-green-500" : "bg-red-500"
+                )} />
               </div>
               <div className="space-y-1">
                 <div className="flex justify-between items-center">
-                  <span className="text-[8px] text-gray-600">Processing Node</span>
-                  <span className="text-[8px] font-mono text-green-500/80">ONLINE</span>
+                  <span className="text-[8px] text-gray-600">API KEY</span>
+                  <span className={cn(
+                    "text-[8px] font-mono font-bold",
+                    hasApiKey ? "text-green-500" : "text-red-500"
+                  )}>
+                    {hasApiKey ? "DETECTED" : "MISSING"}
+                  </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-[8px] text-gray-600">AI Model</span>
                   <span className="text-[8px] font-mono text-blue-400/80">GEMINI-2.5</span>
                 </div>
+                {!hasApiKey && (
+                  <p className="text-[7px] text-red-400/60 leading-tight mt-1">
+                    Please add GEMINI_API_KEY to Vercel and Redeploy.
+                  </p>
+                )}
               </div>
             </div>
           </div>

@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 
-export type EnhancementMode = 'ultra-hd' | 'denoise' | 'sharpen' | 'portrait' | 'anime' | 'standard';
+export type EnhancementMode = 'ultra-hd' | 'denoise' | 'sharpen' | 'portrait' | 'anime' | 'standard' | 'technical' | 'custom';
 export type ResolutionPreset = '1080p' | '2k' | '4k';
 export type UpscaleFactor = '2x' | '4x' | '8x';
 
@@ -11,60 +11,112 @@ export interface EnhancementOptions {
   faceEnhancement: boolean;
   noiseReduction: number;
   sharpening: number;
+  customPrompt?: string;
 }
 
 export async function enhanceImage(base64Image: string, mimeType: string, options: EnhancementOptions): Promise<string> {
-  // Use the environment API key directly for gemini-2.5-flash-image
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-  
-  const model = "gemini-2.5-flash-image";
-  
-  const prompts: Record<EnhancementMode, string> = {
-    'ultra-hd': "Act as a professional image upscaler. Enhance this image to Ultra HD quality. Restore all fine details, textures, and edges. Output the enhanced image directly.",
-    'denoise': "Act as a professional denoiser. Remove noise and grain from this image while preserving sharpness. Output the cleaned image directly.",
-    'sharpen': "Act as a professional sharpening tool. Enhance edges and fine details naturally. Output the sharpened image directly.",
-    'portrait': "Act as a professional portrait retoucher. Enhance skin, eyes, and hair details. Output the retouched portrait directly.",
-    'anime': "Act as a professional anime upscaler. Clean up lines and vibrant colors. Output the enhanced artwork directly.",
-    'standard': "Act as a professional image enhancer. Upscale and improve overall quality. Output the enhanced image directly."
-  };
+  // Robust key detection
+  const key = process.env.GEMINI_API_KEY || 
+              (import.meta as any).env?.VITE_GEMINI_API_KEY || 
+              (window as any).GEMINI_API_KEY;
 
-  let prompt = prompts[options.mode];
-  if (options.faceEnhancement) {
-    prompt += " Specifically detect and enhance any faces to high quality.";
+  if (!key || key === 'MY_GEMINI_API_KEY' || key === 'undefined' || key === '') {
+    const debugInfo = `(Status: ${!key ? 'missing' : 'invalid'}, Mode: ${process.env.NODE_ENV})`;
+    throw new Error(`API Key Missing. ${debugInfo} If you are on Vercel, please add GEMINI_API_KEY to your Environment Variables and REDEPLOY. If you are in the preview, please refresh the page.`);
   }
-  prompt += ` Target resolution: ${options.resolution}. Upscale: ${options.upscale}. MAINTAIN ORIGINAL COLORS. DO NOT RETURN TEXT, ONLY THE ENHANCED IMAGE.`;
+  const ai = new GoogleGenAI({ apiKey: key });
+  
+  // Use a list of models to try. gemini-2.5-flash-image is the primary model for image editing/generation.
+  const modelsToTry = ["gemini-2.5-flash-image", "gemini-3-flash-preview", "gemini-3.1-flash-lite-preview"];
+  let lastError = "";
 
-  try {
-    const response = await ai.models.generateContent({
-      model: model,
-      contents: {
-        parts: [
-          {
-            inlineData: {
-              data: base64Image.split(',')[1] || base64Image,
-              mimeType: mimeType,
+  for (const modelName of modelsToTry) {
+    try {
+      const prompts: Record<EnhancementMode, string> = {
+        'ultra-hd': "Enhance this image to Ultra HD. Restore fine details, textures, and edges.",
+        'denoise': "Remove noise and grain while preserving sharpness.",
+        'sharpen': "Sharpen edges and fine details naturally.",
+        'portrait': "Retouch portrait: enhance skin, eyes, and hair.",
+        'anime': "Enhance this anime/artwork. Clean lines and vibrant colors.",
+        'standard': "Perform a balanced enhancement: upscale and improve overall quality.",
+        'technical': "This is a technical software/UI screenshot. Sharpen all text, icons, and interface elements. Make everything crisp and readable. Do not alter the layout.",
+        'custom': options.customPrompt || "Enhance this image based on user requirements."
+      };
+
+      let prompt = prompts[options.mode];
+      if (options.faceEnhancement) {
+        prompt += " Specifically detect and enhance any faces to high quality.";
+      }
+      prompt += ` Target resolution: ${options.resolution}. Upscale factor: ${options.upscale}. MAINTAIN ORIGINAL COLORS. OUTPUT ONLY THE ENHANCED IMAGE. DO NOT EXPLAIN OR REFUSE.`;
+
+      const response = await ai.models.generateContent({
+        model: modelName,
+        contents: {
+          parts: [
+            {
+              inlineData: {
+                data: base64Image.split(',')[1] || base64Image,
+                mimeType: mimeType,
+              },
             },
-          },
-          {
-            text: prompt,
-          },
-        ],
-      },
-    });
+            {
+              text: prompt,
+            },
+          ],
+        },
+        config: {
+          systemInstruction: "You are a specialized technical image restoration engine. Your ONLY task is to upscale and sharpen the provided image. You are NOT an artist and you are NOT creating content. You are a pixel-processing tool. You must NEVER refuse a request to sharpen a technical interface or software screenshot. Return ONLY the image part. No text.",
+        }
+      });
 
-    let textResponse = "";
-    for (const part of response.candidates?.[0]?.content?.parts || []) {
-      if (part.inlineData) {
-        return `data:image/png;base64,${part.inlineData.data}`;
+      // Check for safety blocks
+      if (response.candidates?.[0]?.finishReason === 'SAFETY') {
+        lastError = "This image was flagged by safety filters. Please try a different image.";
+        continue;
       }
-      if (part.text) {
-        textResponse += part.text;
+
+      let textResponse = "";
+      for (const part of response.candidates?.[0]?.content?.parts || []) {
+        if (part.inlineData) {
+          return `data:image/png;base64,${part.inlineData.data}`;
+        }
+        if (part.text) {
+          textResponse += part.text;
+        }
       }
+
+      // If we get here, no image was returned in the parts
+      lastError = textResponse || "No image data returned by this model.";
+      
+      // If it's a known "busy" text response, continue. Otherwise, it might be a real error.
+      if (textResponse.includes("429") || textResponse.includes("Quota") || textResponse.includes("503") || textResponse.includes("demand") || textResponse.includes("overloaded")) {
+        continue;
+      }
+      
+      // If the model just returned some text instead of an image, try the next model
+      continue;
+    } catch (error: any) {
+      const msg = error?.message || String(error);
+      lastError = msg;
+      
+      // If it's a "busy" error or a model-specific failure, try the next model
+      if (msg.includes("503") || msg.includes("demand") || msg.includes("429") || msg.includes("Quota") || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("overloaded") || msg.includes("not found")) {
+        continue;
+      }
+      // For other unexpected errors, we still try the next model to be safe
+      continue;
     }
-    
-    throw new Error(textResponse || "No image data returned. Try a different enhancement mode or a clearer image.");
-  } catch (error) {
-    console.error("Enhancement failed:", error);
-    throw error;
   }
+
+  // If we get here, all models failed
+  if (lastError.includes("503") || lastError.includes("demand") || lastError.includes("overloaded")) {
+    throw new Error("Google servers are currently overloaded. Please wait 1-2 minutes and try again.");
+  }
+  if (lastError.includes("429") || lastError.includes("Quota") || lastError.includes("RESOURCE_EXHAUSTED")) {
+    throw new Error("API Limit Reached. Please wait a minute or try a different image.");
+  }
+  if (lastError.includes("SAFETY")) {
+    throw new Error("This image was flagged by safety filters. Please try a different image.");
+  }
+  throw new Error(lastError || "Enhancement failed across all available models. Please try again later.");
 }
